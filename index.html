@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>資材カウンター</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f4f8; color: #1a202c; }
+
+    .header { background: #2b6cb0; color: white; padding: 14px 16px; text-align: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .header h1 { font-size: 18px; font-weight: bold; }
+    .header p  { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    .tabs { display: flex; background: white; border-bottom: 2px solid #e2e8f0; position: sticky; top: 54px; z-index: 99; }
+    .tab { flex: 1; padding: 12px 4px; text-align: center; cursor: pointer; font-size: 13px; color: #718096; font-weight: 500; }
+    .tab.active { color: #2b6cb0; border-bottom: 2px solid #2b6cb0; margin-bottom: -2px; }
+
+    .content { padding: 12px; max-width: 500px; margin: 0 auto; padding-bottom: 40px; }
+    .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+
+    /* カメラ */
+    .camera-area { border: 2px dashed #cbd5e0; border-radius: 10px; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: #f7fafc; overflow: hidden; }
+    .camera-area img { width: 100%; max-height: 280px; object-fit: contain; border-radius: 8px; }
+    .cam-icon { font-size: 44px; margin-bottom: 8px; }
+    input[type="file"] { display: none; }
+
+    /* ボタン */
+    .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; text-align: center; }
+    .btn:active { opacity: 0.85; }
+    .btn-primary { background: #2b6cb0; color: white; }
+    .btn-primary:disabled { background: #a0aec0; cursor: default; }
+    .btn-secondary { background: #e2e8f0; color: #4a5568; }
+    .btn-danger { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+    .btn-sm { width: auto; display: inline-block; padding: 8px 14px; font-size: 13px; }
+
+    /* 結果 */
+    .result-row { display: flex; align-items: center; padding: 11px 0; border-bottom: 1px solid #f0f4f8; }
+    .result-row:last-child { border-bottom: none; }
+    .result-name { flex: 1; font-size: 15px; font-weight: 500; }
+    .conf { font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .conf-high   { background: #f0fff4; color: #276749; }
+    .conf-medium { background: #fffbeb; color: #975a16; }
+    .conf-low    { background: #fff5f5; color: #c53030; }
+    .counter { display: flex; align-items: center; gap: 6px; }
+    .cnt-btn { width: 34px; height: 34px; border: 1px solid #cbd5e0; border-radius: 8px; background: #f7fafc; cursor: pointer; font-size: 18px; }
+    .cnt-val { min-width: 44px; text-align: center; font-size: 20px; font-weight: bold; color: #2b6cb0; }
+    .cnt-unit { font-size: 13px; color: #718096; min-width: 20px; }
+
+    /* ローディング */
+    .loading-box { text-align: center; padding: 28px; }
+    .spinner { width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: #2b6cb0; border-radius: 50%; animation: spin 0.9s linear infinite; margin: 0 auto 14px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 履歴 */
+    .hist-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid #f0f4f8; cursor: pointer; }
+    .hist-item:last-child { border-bottom: none; }
+    .hist-thumb { width: 58px; height: 58px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #e2e8f0; }
+    .hist-no-thumb { width: 58px; height: 58px; border-radius: 8px; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+    .hist-info { flex: 1; min-width: 0; }
+    .hist-date { font-size: 11px; color: #718096; }
+    .hist-loc  { font-size: 12px; color: #4a5568; font-weight: 600; margin-top: 2px; }
+    .hist-summary { font-size: 12px; color: #4a5568; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-del { padding: 6px; color: #fc8181; font-size: 18px; cursor: pointer; }
+
+    /* モーダル */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-end; justify-content: center; }
+    .overlay.open { display: flex; }
+    .modal { background: white; border-radius: 16px 16px 0 0; width: 100%; max-width: 500px; max-height: 80vh; overflow-y: auto; padding: 20px; }
+    .modal-handle { width: 40px; height: 4px; background: #cbd5e0; border-radius: 2px; margin: 0 auto 16px; }
+
+    /* フォーム */
+    .input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; }
+    .input:focus { border-color: #2b6cb0; }
+    .label { font-size: 13px; color: #4a5568; margin-bottom: 6px; display: block; font-weight: 600; }
+    .notes-box { background: #f7fafc; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #4a5568; margin-top: 10px; line-height: 1.6; }
+    .sec-title { font-size: 15px; font-weight: bold; margin-bottom: 12px; }
+    .alert-info { background: #ebf8ff; color: #2c5282; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.7; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📦 資材カウンター</h1>
+  <p>写真を撮るだけでAIが自動カウント</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tb-count"   onclick="showTab('count')">📷 カウント</div>
+  <div class="tab"        id="tb-history" onclick="showTab('history')">📋 履歴</div>
+  <div class="tab"        id="tb-settings"onclick="showTab('settings')">⚙️ 設定</div>
+</div>
+
+<div class="content">
+
+  <!-- ========== カウント ========== -->
+  <div id="tab-count">
+    <div class="card">
+      <div class="camera-area" id="camArea" onclick="document.getElementById('fileInput').click()">
+        <div id="camPlaceholder" style="text-align:center;padding:20px;">
+          <div class="cam-icon">📷</div>
+          <p style="font-weight:bold;font-size:15px;margin-bottom:4px;">写真を撮る / 選ぶ</p>
+          <p style="font-size:12px;color:#718096;">タップしてカメラを起動</p>
+        </div>
+        <img id="preview" style="display:none;">
+      </div>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="onImage(event)">
+      <div style="margin-top:12px;">
+        <input class="input" id="locInput" placeholder="場所・工区名（任意）" style="margin-bottom:10px;">
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" disabled>🔍 AIでカウントする</button>
+      </div>
+    </div>
+
+    <div class="card" id="loadingCard" style="display:none;">
+      <div class="loading-box">
+        <div class="spinner"></div>
+        <p style="font-weight:bold;">AIが資材を数えています…</p>
+        <p style="font-size:12px;color:#718096;margin-top:4px;">写真によっては少し時間がかかります</p>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span class="sec-title" style="margin:0;">📊 カウント結果</span>
+        <span style="font-size:11px;background:#ebf8ff;color:#2b6cb0;padding:2px 8px;border-radius:99px;font-weight:600;">修正できます</span>
+      </div>
+      <div id="resultList"></div>
+      <div id="notesBox"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="btn btn-primary" onclick="saveResult()" style="flex:1;">💾 保存する</button>
+        <button class="btn btn-secondary" onclick="reset()" style="width:auto;padding:14px 16px;">↩</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 履歴 ========== -->
+  <div id="tab-history" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span class="sec-title" style="margin:0;">記録一覧</span>
+        <button class="btn btn-secondary btn-sm" onclick="exportCSV()">CSV出力</button>
+      </div>
+      <div id="historyList"><p style="color:#718096;text-align:center;padding:24px;font-size:14px;">まだ記録がありません</p></div>
+    </div>
+  </div>
+
+  <!-- ========== 設定 ========== -->
+  <div id="tab-settings" style="display:none;">
+    <div class="card">
+      <div class="sec-title">Gemini APIキー設定</div>
+      <label class="label">APIキー（無料）</label>
+      <input class="input" type="password" id="apiKeyInput" placeholder="AIzaSy...">
+      <a href="https://aistudio.google.com/app/apikey" target="_blank"
+         style="display:inline-block;margin-top:8px;font-size:12px;color:#2b6cb0;">→ Google AI Studio で無料取得</a>
+      <div style="height:16px;"></div>
+      <label class="label">現場名（デフォルト）</label>
+      <input class="input" id="siteInput" placeholder="○○工事現場">
+      <button class="btn btn-primary" onclick="saveSettings()" style="margin-top:16px;">保存する</button>
+    </div>
+    <div class="card">
+      <div class="sec-title">データ管理</div>
+      <button class="btn btn-danger" onclick="clearAll()">🗑️ 履歴をすべて削除する</button>
+    </div>
+    <div class="alert-info">
+      <strong>使い方</strong><br>
+      ① APIキーを取得して設定画面で保存<br>
+      ② カウントタブで写真を撮影<br>
+      ③「AIでカウント」ボタンをタップ<br>
+      ④ 結果を確認・修正して保存<br>
+      ⑤ 履歴タブで記録を管理・CSV出力
+    </div>
+  </div>
+
+</div>
+
+<!-- 詳細モーダル -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+  let imgB64 = null, results = null;
+
+  // 起動時
+  window.onload = () => {
+    const k = ls('apiKey'), s = ls('site');
+    if (k) id('apiKeyInput').value = k;
+    if (s) id('siteInput').value = s;
+  };
+
+  // タブ
+  function showTab(t) {
+    ['count','history','settings'].forEach(n => {
+      id('tab-'+n).style.display = n===t ? 'block' : 'none';
+      id('tb-'+n).classList.toggle('active', n===t);
+    });
+    if (t==='history') renderHistory();
+  }
+
+  // 画像選択・リサイズ
+  function onImage(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX=1200; let w=img.width, h=img.height;
+        if (w>MAX||h>MAX) { if(w>=h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+        const c = document.createElement('canvas');
+        c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        const url = c.toDataURL('image/jpeg',0.85);
+        imgB64 = url.split(',')[1];
+        const p = id('preview');
+        p.src=url; p.style.display='block';
+        id('camPlaceholder').style.display='none';
+        id('analyzeBtn').disabled=false;
+        id('resultCard').style.display='none';
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // AI解析
+  async function analyze() {
+    const apiKey = ls('apiKey');
+    if (!apiKey) { alert('設定タブでAPIキーを入力して保存してください'); showTab('settings'); return; }
+    if (!imgB64) { alert('写真を選択してください'); return; }
+
+    id('loadingCard').style.display='block';
+    id('resultCard').style.display='none';
+    id('analyzeBtn').disabled=true;
+
+    const prompt = `あなたは土木・建設現場の資材管理の専門家です。
+この写真に写っている建設資材を特定して数えてください。
+対象：コンクリートブロック・ヒューム管・U字溝・鉄筋・型枠・砂袋・その他建設資材
+
+JSON形式のみで回答（説明文不要）：
+{"items":[{"name":"資材名","count":数量,"unit":"単位","confidence":"high/medium/low","notes":"補足"}],"overall_notes":"全体備考"}
+
+confidence基準：high=確実 medium=概算 low=推定`;
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        { method:'POST', headers:{'content-type':'application/json'},
+          body: JSON.stringify({ contents:[{parts:[{inline_data:{mime_type:'image/jpeg',data:imgB64}},{text:prompt}]}], generationConfig:{maxOutputTokens:1024,temperature:0.1} }) }
+      );
+      if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`APIエラー(${res.status})`); }
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('AIから応答がありませんでした');
+      const m = text.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('AIの回答を解析できませんでした');
+      results = JSON.parse(m[0]);
+      renderResults();
+    } catch(e) {
+      alert('エラー: '+e.message);
+    } finally {
+      id('loadingCard').style.display='none';
+      id('analyzeBtn').disabled=false;
+    }
+  }
+
+  // 結果描画
+  function renderResults() {
+    const list = id('resultList');
+    list.innerHTML = '';
+    results.items.forEach((item,i) => {
+      const cc = {high:'conf-high',medium:'conf-medium',low:'conf-low'}[item.confidence]||'conf-medium';
+      const cl = {high:'確実',medium:'概算',low:'推定'}[item.confidence]||'';
+      const row = document.createElement('div');
+      row.className='result-row';
+      row.innerHTML=`
+        <div class="result-name">${item.name}<span class="conf ${cc}">${cl}</span>
+          ${item.notes?`<div style="font-size:11px;color:#718096;margin-top:2px;">${item.notes}</div>`:''}
+        </div>
+        <div class="counter">
+          <button class="cnt-btn" onclick="adj(${i},-1)">−</button>
+          <span class="cnt-val" id="cv${i}">${item.count}</span>
+          <button class="cnt-btn" onclick="adj(${i},+1)">＋</button>
+          <span class="cnt-unit">${item.unit}</span>
+        </div>`;
+      list.appendChild(row);
+    });
+    id('notesBox').innerHTML = results.overall_notes
+      ? `<div class="notes-box">💬 ${results.overall_notes}</div>` : '';
+    id('resultCard').style.display='block';
+    id('resultCard').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  function adj(i,d) {
+    results.items[i].count = Math.max(0, results.items[i].count+d);
+    id('cv'+i).textContent = results.items[i].count;
+  }
+
+  // 保存
+  function saveResult() {
+    const hist = getHist();
+    const loc = id('locInput').value.trim() || ls('site') || '';
+    hist.unshift({ id:Date.now(), date:new Date().toISOString(), loc, img:imgB64,
+      items:JSON.parse(JSON.stringify(results.items)), notes:results.overall_notes||'' });
+    setLS('history', JSON.stringify(hist));
+    alert('保存しました！');
+    reset();
+    showTab('history');
+  }
+
+  function reset() {
+    imgB64=null; results=null;
+    id('preview').style.display='none';
+    id('camPlaceholder').style.display='block';
+    id('analyzeBtn').disabled=true;
+    id('resultCard').style.display='none';
+    id('loadingCard').style.display='none';
+    id('fileInput').value='';
+    id('locInput').value='';
+  }
+
+  // 履歴
+  function getHist() { try{return JSON.parse(localStorage.getItem('history')||'[]');}catch{return[];} }
+  function renderHistory() {
+    const hist = getHist();
+    const el = id('historyList');
+    if (!hist.length) { el.innerHTML='<p style="color:#718096;text-align:center;padding:24px;font-size:14px;">まだ記録がありません</p>'; return; }
+    el.innerHTML = hist.map(r => {
+      const d=new Date(r.date);
+      const ds=`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      const sum = r.items.map(i=>`${i.name} ${i.count}${i.unit}`).join(' / ');
+      const th = r.img ? `<img class="hist-thumb" src="data:image/jpeg;base64,${r.img}">`
+                       : `<div class="hist-no-thumb">📦</div>`;
+      return `<div class="hist-item" onclick="showDetail(${r.id})">
+        ${th}
+        <div class="hist-info">
+          <div class="hist-date">${ds}</div>
+          ${r.loc?`<div class="hist-loc">📍 ${r.loc}</div>`:''}
+          <div class="hist-summary">${sum}</div>
+        </div>
+        <div class="hist-del" onclick="delRec(event,${r.id})">🗑</div>
+      </div>`;
+    }).join('');
+  }
+
+  function showDetail(rid) {
+    const r = getHist().find(h=>h.id===rid); if(!r) return;
+    const d=new Date(r.date);
+    const ds=`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    id('modalBody').innerHTML=`
+      <div style="font-size:13px;color:#718096;">${ds}</div>
+      ${r.loc?`<div style="font-size:15px;font-weight:bold;margin:6px 0 12px;">📍 ${r.loc}</div>`:'<div style="height:12px;"></div>'}
+      ${r.img?`<img src="data:image/jpeg;base64,${r.img}" style="width:100%;border-radius:8px;margin-bottom:12px;">`:''}
+      ${r.items.map(i=>`<div class="result-row"><div class="result-name">${i.name}</div>
+        <div style="font-size:20px;font-weight:bold;color:#2b6cb0;">${i.count} <span style="font-size:13px;font-weight:normal;color:#718096;">${i.unit}</span></div></div>`).join('')}
+      ${r.notes?`<div class="notes-box" style="margin-top:10px;">💬 ${r.notes}</div>`:''}`;
+    id('overlay').classList.add('open');
+  }
+  function closeModal() { id('overlay').classList.remove('open'); }
+
+  function delRec(e,rid) {
+    e.stopPropagation();
+    if(!confirm('この記録を削除しますか？')) return;
+    setLS('history', JSON.stringify(getHist().filter(h=>h.id!==rid)));
+    renderHistory();
+  }
+
+  // CSV出力
+  function exportCSV() {
+    const hist=getHist();
+    if(!hist.length){alert('記録がありません');return;}
+    const rows=[['日時','場所','資材名','数量','単位','信頼度']];
+    hist.forEach(r=>{
+      const d=new Date(r.date);
+      const ds=`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      r.items.forEach(i=>rows.push([ds,r.loc||'',i.name,i.count,i.unit,i.confidence||'']));
+    });
+    const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));
+    a.download=`資材記録_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  // 設定
+  function saveSettings() {
+    const k=id('apiKeyInput').value.trim(), s=id('siteInput').value.trim();
+    if(k) setLS('apiKey',k); else localStorage.removeItem('apiKey');
+    if(s) setLS('site',s); else localStorage.removeItem('site');
+    alert('設定を保存しました');
+  }
+  function clearAll() {
+    if(!confirm('すべての記録を削除しますか？\nこの操作は元に戻せません。')) return;
+    localStorage.removeItem('history'); renderHistory(); alert('削除しました');
+  }
+
+  // ユーティリティ
+  const id = s => document.getElementById(s);
+  const ls = k => localStorage.getItem(k);
+  const setLS = (k,v) => localStorage.setItem(k,v);
+  const p2 = n => String(n).padStart(2,'0');
+</script>
+</body>
+</html>
