@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>資材カウンター</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f4f8; color: #1a202c; min-height: 100vh; }
+
+    .header { background: #2b6cb0; color: white; padding: 14px 16px; text-align: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .header h1 { font-size: 18px; font-weight: bold; }
+    .header p { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    .tabs { display: flex; background: white; border-bottom: 2px solid #e2e8f0; position: sticky; top: 54px; z-index: 99; }
+    .tab { flex: 1; padding: 12px 4px; text-align: center; cursor: pointer; font-size: 13px; color: #718096; font-weight: 500; transition: color .2s; }
+    .tab.active { color: #2b6cb0; border-bottom: 2px solid #2b6cb0; margin-bottom: -2px; }
+
+    .content { padding: 12px; max-width: 500px; margin: 0 auto; padding-bottom: 40px; }
+
+    .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+
+    /* Camera */
+    .camera-area { border: 2px dashed #cbd5e0; border-radius: 10px; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: #f7fafc; overflow: hidden; transition: border-color .2s; }
+    .camera-area:active { border-color: #2b6cb0; }
+    .camera-area img { width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; }
+    .camera-placeholder { text-align: center; padding: 20px; }
+    .camera-icon { font-size: 44px; margin-bottom: 8px; }
+
+    /* Buttons */
+    .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; text-align: center; transition: opacity .2s, transform .1s; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: #2b6cb0; color: white; }
+    .btn-primary:disabled { background: #a0aec0; cursor: default; transform: none; }
+    .btn-secondary { background: #e2e8f0; color: #4a5568; }
+    .btn-danger { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+    .btn-sm { width: auto; display: inline-block; padding: 8px 14px; font-size: 13px; }
+
+    input[type="file"] { display: none; }
+
+    /* Results */
+    .result-row { display: flex; align-items: center; padding: 11px 0; border-bottom: 1px solid #f0f4f8; }
+    .result-row:last-child { border-bottom: none; }
+    .result-name { flex: 1; font-size: 15px; font-weight: 500; }
+    .result-confidence { font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .conf-high { background: #f0fff4; color: #276749; }
+    .conf-medium { background: #fffbeb; color: #975a16; }
+    .conf-low { background: #fff5f5; color: #c53030; }
+    .counter { display: flex; align-items: center; gap: 6px; }
+    .cnt-btn { width: 34px; height: 34px; border: 1px solid #cbd5e0; border-radius: 8px; background: #f7fafc; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+    .cnt-btn:active { background: #e2e8f0; }
+    .cnt-val { min-width: 44px; text-align: center; font-size: 20px; font-weight: bold; color: #2b6cb0; }
+    .cnt-unit { font-size: 13px; color: #718096; min-width: 20px; }
+
+    /* Loading */
+    .loading-box { text-align: center; padding: 28px; }
+    .spinner { width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: #2b6cb0; border-radius: 50%; animation: spin 0.9s linear infinite; margin: 0 auto 14px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* History */
+    .hist-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid #f0f4f8; cursor: pointer; }
+    .hist-item:last-child { border-bottom: none; }
+    .hist-thumb { width: 58px; height: 58px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #e2e8f0; }
+    .hist-thumb-placeholder { width: 58px; height: 58px; border-radius: 8px; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+    .hist-info { flex: 1; min-width: 0; }
+    .hist-date { font-size: 11px; color: #718096; }
+    .hist-location { font-size: 12px; color: #4a5568; font-weight: 600; margin-top: 2px; }
+    .hist-summary { font-size: 12px; color: #4a5568; margin-top: 3px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-delete { padding: 6px; color: #fc8181; font-size: 18px; cursor: pointer; }
+
+    /* Detail modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: flex-end; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: white; border-radius: 16px 16px 0 0; width: 100%; max-width: 500px; max-height: 80vh; overflow-y: auto; padding: 20px; }
+    .modal-handle { width: 40px; height: 4px; background: #cbd5e0; border-radius: 2px; margin: 0 auto 16px; }
+
+    /* Input */
+    .input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; }
+    .input:focus { border-color: #2b6cb0; box-shadow: 0 0 0 2px rgba(43,108,176,0.15); }
+    .label { font-size: 13px; color: #4a5568; margin-bottom: 6px; display: block; font-weight: 600; }
+
+    .notes-box { background: #f7fafc; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #4a5568; margin-top: 10px; line-height: 1.6; }
+
+    .alert { padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+    .alert-info { background: #ebf8ff; color: #2c5282; }
+
+    .section-title { font-size: 15px; font-weight: bold; margin-bottom: 12px; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .badge-blue { background: #ebf8ff; color: #2b6cb0; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📦 資材カウンター</h1>
+  <p>写真を撮るだけでAIが自動カウント</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-btn-count" onclick="showTab('count')">📷 カウント</div>
+  <div class="tab" id="tab-btn-history" onclick="showTab('history')">📋 履歴</div>
+  <div class="tab" id="tab-btn-settings" onclick="showTab('settings')">⚙️ 設定</div>
+</div>
+
+<div class="content">
+
+  <!-- ===== カウントタブ ===== -->
+  <div id="tab-count">
+    <div class="card">
+      <div class="camera-area" id="cameraArea" onclick="triggerCamera()">
+        <div class="camera-placeholder" id="camPlaceholder">
+          <div class="camera-icon">📷</div>
+          <p style="font-weight:bold;font-size:15px;margin-bottom:4px">写真を撮る / 選ぶ</p>
+          <p style="font-size:12px;color:#718096">タップしてカメラを起動</p>
+        </div>
+        <img id="previewImg" style="display:none;">
+      </div>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleImage(event)">
+
+      <div style="margin-top:12px;">
+        <input class="input" id="locationInput" placeholder="場所・工区名（任意）" style="margin-bottom:10px;">
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeImage()" disabled>
+          🔍 AIでカウントする
+        </button>
+      </div>
+    </div>
+
+    <div class="card" id="loadingArea" style="display:none;">
+      <div class="loading-box">
+        <div class="spinner"></div>
+        <p style="font-weight:bold;margin-bottom:4px;">AIが資材を数えています…</p>
+        <p style="font-size:12px;color:#718096;">写真によっては少し時間がかかります</p>
+      </div>
+    </div>
+
+    <div class="card" id="resultsArea" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span class="section-title" style="margin:0;">📊 カウント結果</span>
+        <span class="badge badge-blue">修正できます</span>
+      </div>
+      <div id="resultsList"></div>
+      <div id="notesArea"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="btn btn-primary" onclick="saveResult()" style="flex:1;">💾 保存する</button>
+        <button class="btn btn-secondary" onclick="resetCount()" style="width:auto;padding:14px 16px;">↩</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 履歴タブ ===== -->
+  <div id="tab-history" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span class="section-title" style="margin:0;">記録一覧</span>
+        <button class="btn btn-secondary btn-sm" onclick="exportCSV()">CSV出力</button>
+      </div>
+      <div id="historyList">
+        <p style="color:#718096;text-align:center;padding:24px;font-size:14px;">まだ記録がありません</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 設定タブ ===== -->
+  <div id="tab-settings" style="display:none;">
+    <div class="card">
+      <div class="section-title">API設定</div>
+      <label class="label">Google Gemini APIキー（無料）</label>
+      <input class="input" type="password" id="apiKeyInput" placeholder="AIza...">
+      <p style="font-size:11px;color:#718096;margin-top:5px;">このデバイスのローカルにのみ保存されます</p>
+      <a href="https://aistudio.google.com/app/apikey" target="_blank"
+         style="display:inline-block;margin-top:8px;font-size:12px;color:#2b6cb0;text-decoration:underline;">
+        → Google AI Studio でAPIキーを無料取得
+      </a>
+
+      <div style="height:16px;"></div>
+      <label class="label">現場名（デフォルト）</label>
+      <input class="input" id="defaultSiteInput" placeholder="○○工事現場">
+
+      <button class="btn btn-primary" onclick="saveSettings()" style="margin-top:16px;">保存する</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">データ管理</div>
+      <button class="btn btn-danger" onclick="clearHistory()">🗑️ 履歴をすべて削除する</button>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>使い方</strong><br>
+      ① APIキーを入力して保存<br>
+      ② カウントタブで写真を撮影<br>
+      ③「AIでカウント」ボタンをタップ<br>
+      ④ 結果を確認・修正して保存<br>
+      ⑤ 履歴タブで記録を管理・CSV出力
+    </div>
+  </div>
+
+</div>
+
+<!-- 詳細モーダル -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modalContent">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+  let currentImageB64 = null;
+  let currentResults = null;
+
+  // 初期化
+  window.onload = () => {
+    const k = localStorage.getItem('apiKey');
+    if (k) document.getElementById('apiKeyInput').value = k;
+    const s = localStorage.getItem('defaultSite');
+    if (s) document.getElementById('defaultSiteInput').value = s;
+  };
+
+  // タブ切り替え
+  function showTab(name) {
+    ['count','history','settings'].forEach(t => {
+      document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
+      document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
+    });
+    if (name === 'history') renderHistory();
+  }
+
+  // カメラ起動
+  function triggerCamera() {
+    document.getElementById('fileInput').click();
+  }
+
+  // 画像選択
+  function handleImage(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        // 最大1200pxにリサイズして圧縮
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        currentImageB64 = dataUrl.split(',')[1];
+
+        const prev = document.getElementById('previewImg');
+        prev.src = dataUrl;
+        prev.style.display = 'block';
+        document.getElementById('camPlaceholder').style.display = 'none';
+        document.getElementById('analyzeBtn').disabled = false;
+        document.getElementById('resultsArea').style.display = 'none';
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // AI解析
+  async function analyzeImage() {
+    const apiKey = localStorage.getItem('apiKey');
+    if (!apiKey) {
+      alert('設定タブでAPIキーを入力して保存してください');
+      showTab('settings');
+      return;
+    }
+    if (!currentImageB64) { alert('写真を選択してください'); return; }
+
+    document.getElementById('loadingArea').style.display = 'block';
+    document.getElementById('resultsArea').style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = true;
+
+    const prompt = `あなたは土木・建設現場の資材管理の専門家です。
+この写真に写っている建設資材を特定して数えてください。
+
+主な対象資材：
+- コンクリートブロック（各種サイズ・種類）
+- ヒューム管・コンクリート管
+- U字溝・側溝ブロック・縁石
+- 鉄筋（束・本単位）
+- 型枠・合板
+- 砂袋・土嚢
+- その他の建設資材
+
+回答はJSON形式のみで返してください（説明文・前置き一切不要）：
+{
+  "items": [
+    {
+      "name": "資材名（具体的に）",
+      "count": 数量（整数）,
+      "unit": "本/枚/個/束/袋など",
+      "confidence": "high/medium/low",
+      "notes": "補足（積み重なりで見えにくい等）"
+    }
+  ],
+  "overall_notes": "全体の状況や注意点（数えにくかった理由など）"
+}
+
+confidence の基準：
+- high: はっきり数えられた
+- medium: 一部見えにくいが概ね正確
+- low: 積み重なりや陰で概算`;
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inline_data: { mime_type: 'image/jpeg', data: currentImageB64 } },
+                { text: prompt }
+              ]
+            }],
+            generationConfig: { maxOutputTokens: 1024, temperature: 0.1 }
+          })
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `APIエラー (${res.status})`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('AIから応答を取得できませんでした');
+      const m = text.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('AIの回答をJSONとして解析できませんでした');
+      currentResults = JSON.parse(m[0]);
+      renderResults(currentResults);
+
+    } catch (err) {
+      alert('エラー: ' + err.message);
+    } finally {
+      document.getElementById('loadingArea').style.display = 'none';
+      document.getElementById('analyzeBtn').disabled = false;
+    }
+  }
+
+  // 結果描画
+  function renderResults(results) {
+    const list = document.getElementById('resultsList');
+    list.innerHTML = '';
+
+    results.items.forEach((item, i) => {
+      const confClass = { high: 'conf-high', medium: 'conf-medium', low: 'conf-low' }[item.confidence] || 'conf-medium';
+      const confLabel = { high: '確実', medium: '概算', low: '推定' }[item.confidence] || '';
+
+      const row = document.createElement('div');
+      row.className = 'result-row';
+      row.innerHTML = `
+        <div class="result-name">
+          ${item.name}
+          <span class="result-confidence ${confClass}">${confLabel}</span>
+          ${item.notes ? `<div style="font-size:11px;color:#718096;margin-top:2px;">${item.notes}</div>` : ''}
+        </div>
+        <div class="counter">
+          <button class="cnt-btn" onclick="adjust(${i},-1)">−</button>
+          <span class="cnt-val" id="cv-${i}">${item.count}</span>
+          <button class="cnt-btn" onclick="adjust(${i},+1)">＋</button>
+          <span class="cnt-unit">${item.unit}</span>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+
+    const notesArea = document.getElementById('notesArea');
+    notesArea.innerHTML = results.overall_notes
+      ? `<div class="notes-box">💬 ${results.overall_notes}</div>`
+      : '';
+
+    document.getElementById('resultsArea').style.display = 'block';
+    document.getElementById('resultsArea').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function adjust(i, d) {
+    currentResults.items[i].count = Math.max(0, currentResults.items[i].count + d);
+    document.getElementById('cv-' + i).textContent = currentResults.items[i].count;
+  }
+
+  // 保存
+  function saveResult() {
+    const history = getHistory();
+    const location = document.getElementById('locationInput').value.trim()
+      || localStorage.getItem('defaultSite') || '';
+
+    history.unshift({
+      id: Date.now(),
+      date: new Date().toISOString(),
+      location,
+      image: currentImageB64,
+      items: JSON.parse(JSON.stringify(currentResults.items)),
+      notes: currentResults.overall_notes || ''
+    });
+
+    localStorage.setItem('history', JSON.stringify(history));
+    alert('保存しました！');
+    resetCount();
+    showTab('history');
+  }
+
+  // リセット
+  function resetCount() {
+    currentImageB64 = null;
+    currentResults = null;
+    document.getElementById('previewImg').style.display = 'none';
+    document.getElementById('camPlaceholder').style.display = 'block';
+    document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('resultsArea').style.display = 'none';
+    document.getElementById('loadingArea').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('locationInput').value = '';
+  }
+
+  // 履歴取得
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem('history') || '[]'); }
+    catch { return []; }
+  }
+
+  // 履歴描画
+  function renderHistory() {
+    const history = getHistory();
+    const list = document.getElementById('historyList');
+
+    if (!history.length) {
+      list.innerHTML = '<p style="color:#718096;text-align:center;padding:24px;font-size:14px;">まだ記録がありません</p>';
+      return;
+    }
+
+    list.innerHTML = history.map(rec => {
+      const d = new Date(rec.date);
+      const dateStr = `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      const summary = rec.items.map(i => `${i.name} ${i.count}${i.unit}`).join(' / ');
+      const thumb = rec.image
+        ? `<img class="hist-thumb" src="data:image/jpeg;base64,${rec.image}">`
+        : `<div class="hist-thumb-placeholder">📦</div>`;
+
+      return `
+        <div class="hist-item" onclick="showDetail(${rec.id})">
+          ${thumb}
+          <div class="hist-info">
+            <div class="hist-date">${dateStr}</div>
+            ${rec.location ? `<div class="hist-location">📍 ${rec.location}</div>` : ''}
+            <div class="hist-summary">${summary}</div>
+          </div>
+          <div class="hist-delete" onclick="deleteRecord(event,${rec.id})">🗑</div>
+        </div>`;
+    }).join('');
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // 詳細表示
+  function showDetail(id) {
+    const rec = getHistory().find(h => h.id === id);
+    if (!rec) return;
+    const d = new Date(rec.date);
+    const dateStr = `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    const rows = rec.items.map(i =>
+      `<div class="result-row">
+        <div class="result-name">${i.name}</div>
+        <div style="font-size:20px;font-weight:bold;color:#2b6cb0;">${i.count} <span style="font-size:13px;font-weight:normal;color:#718096;">${i.unit}</span></div>
+      </div>`
+    ).join('');
+
+    document.getElementById('modalBody').innerHTML = `
+      <div style="font-size:13px;color:#718096;margin-bottom:4px;">${dateStr}</div>
+      ${rec.location ? `<div style="font-size:15px;font-weight:bold;margin-bottom:12px;">📍 ${rec.location}</div>` : '<div style="height:12px;"></div>'}
+      ${rec.image ? `<img src="data:image/jpeg;base64,${rec.image}" style="width:100%;border-radius:8px;margin-bottom:12px;">` : ''}
+      <div>${rows}</div>
+      ${rec.notes ? `<div class="notes-box" style="margin-top:10px;">💬 ${rec.notes}</div>` : ''}
+    `;
+    document.getElementById('modalOverlay').classList.add('open');
+  }
+
+  function closeModal(e) {
+    if (e.target === document.getElementById('modalOverlay')) {
+      document.getElementById('modalOverlay').classList.remove('open');
+    }
+  }
+
+  // 個別削除
+  function deleteRecord(e, id) {
+    e.stopPropagation();
+    if (!confirm('この記録を削除しますか？')) return;
+    const history = getHistory().filter(h => h.id !== id);
+    localStorage.setItem('history', JSON.stringify(history));
+    renderHistory();
+  }
+
+  // CSV出力
+  function exportCSV() {
+    const history = getHistory();
+    if (!history.length) { alert('記録がありません'); return; }
+
+    const rows = [['日時', '場所', '資材名', '数量', '単位', '信頼度']];
+    history.forEach(rec => {
+      const d = new Date(rec.date);
+      const dateStr = `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      rec.items.forEach(item => {
+        rows.push([dateStr, rec.location || '', item.name, item.count, item.unit, item.confidence || '']);
+      });
+    });
+
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `資材記録_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // 設定保存
+  function saveSettings() {
+    const k = document.getElementById('apiKeyInput').value.trim();
+    const s = document.getElementById('defaultSiteInput').value.trim();
+    if (k) localStorage.setItem('apiKey', k);
+    else localStorage.removeItem('apiKey');
+    if (s) localStorage.setItem('defaultSite', s);
+    else localStorage.removeItem('defaultSite');
+    alert('設定を保存しました');
+  }
+
+  // 履歴全削除
+  function clearHistory() {
+    if (!confirm('すべての記録を削除しますか？\nこの操作は元に戻せません。')) return;
+    localStorage.removeItem('history');
+    renderHistory();
+    alert('削除しました');
+  }
+</script>
+</body>
+</html>
