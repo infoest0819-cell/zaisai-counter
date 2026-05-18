@@ -156,6 +156,8 @@
       <label class="label">現場名（デフォルト）</label>
       <input class="input" id="siteInput" placeholder="○○工事現場">
       <button class="btn btn-primary" onclick="saveSettings()" style="margin-top:16px;">保存する</button>
+      <button class="btn btn-secondary" onclick="testAPI()" style="margin-top:8px;">🔌 API接続テスト</button>
+      <div id="testResult" style="margin-top:10px;font-size:13px;display:none;"></div>
     </div>
     <div class="card">
       <div class="sec-title">データ管理</div>
@@ -251,16 +253,21 @@ confidence基準：high=確実 medium=概算 low=推定`;
         { method:'POST', headers:{'content-type':'application/json'},
           body: JSON.stringify({ contents:[{parts:[{inline_data:{mime_type:'image/jpeg',data:imgB64}},{text:prompt}]}], generationConfig:{maxOutputTokens:1024,temperature:0.1} }) }
       );
-      if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`APIエラー(${res.status})`); }
+      if (!res.ok) {
+        const e=await res.json().catch(()=>({}));
+        const msg = e.error?.message || `HTTPエラー ${res.status}`;
+        const code = e.error?.code || res.status;
+        throw new Error(`[${code}] ${msg}`);
+      }
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) throw new Error('AIから応答がありませんでした');
       const m = text.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('AIの回答を解析できませんでした');
+      if (!m) throw new Error('AIの回答を解析できませんでした: '+text.slice(0,100));
       results = JSON.parse(m[0]);
       renderResults();
     } catch(e) {
-      alert('エラー: '+e.message);
+      alert('❌ エラー\n\n' + e.message + '\n\n設定タブでAPIキーを確認してください');
     } finally {
       id('loadingCard').style.display='none';
       id('analyzeBtn').disabled=false;
@@ -391,6 +398,32 @@ confidence基準：high=確実 medium=概算 low=推定`;
     if(k) setLS('apiKey',k); else localStorage.removeItem('apiKey');
     if(s) setLS('site',s); else localStorage.removeItem('site');
     alert('設定を保存しました');
+  }
+
+  async function testAPI() {
+    const k = id('apiKeyInput').value.trim() || ls('apiKey');
+    const el = id('testResult');
+    if (!k) { el.style.display='block'; el.style.color='#c53030'; el.textContent='❌ APIキーを入力してください'; return; }
+    el.style.display='block'; el.style.color='#718096'; el.textContent='🔄 接続確認中...';
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${k}`,
+        { method:'POST', headers:{'content-type':'application/json'},
+          body: JSON.stringify({ contents:[{parts:[{text:'「OK」とだけ答えてください'}]}], generationConfig:{maxOutputTokens:10,temperature:0} }) }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data.error?.message || `HTTP ${res.status}`;
+        el.style.color='#c53030';
+        el.textContent='❌ エラー: ' + msg;
+      } else {
+        el.style.color='#276749';
+        el.textContent='✅ 接続成功！AIが使えます';
+      }
+    } catch(e) {
+      el.style.color='#c53030';
+      el.textContent='❌ ネットワークエラー: ' + e.message;
+    }
   }
   function clearAll() {
     if(!confirm('すべての記録を削除しますか？\nこの操作は元に戻せません。')) return;
